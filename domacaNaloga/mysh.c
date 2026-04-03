@@ -66,12 +66,36 @@ LineInfo stringCleanup(char* line){
 }
 
 void parseTokens(int* tokenCount, char** tokens){
-    if(*tokenCount > 3){
-        *tokenCount -= 1;
-        for(int i = 0; i < 3; i++){
-            printf("%d: %s\n", *tokenCount, tokens[*tokenCount]);
-            *tokenCount -= 1;
+    bool preusmeritevIzhoda = false;
+    char* pIPtr = NULL;
+    bool preusmeritevVhoda = false;
+    char* pVPtr = NULL;
+    bool ozadje = false;
+    *tokenCount -= 1;
+    int diff = 3 < *tokenCount - 1 ? 3 : *tokenCount - 1;
+
+    for(int i = 0; i < diff; i++){
+        if(tokens[*tokenCount][0] == '&' && strlen(tokens[*tokenCount]) == 1){
+            ozadje = true;
         }
+        if(tokens[*tokenCount][0] == '>'){
+            preusmeritevIzhoda = true;
+            pIPtr = tokens[*tokenCount] + 1;
+        }
+        if(tokens[*tokenCount][0] == '<'){
+            preusmeritevVhoda= true;
+            pVPtr = tokens[*tokenCount] + 1;
+        }
+        *tokenCount -= 1;
+    }
+    if(preusmeritevVhoda){
+        printf("Input redirect: '%s'\n", pVPtr);
+    }
+    if(preusmeritevIzhoda){
+        printf("Output redirect: '%s'\n", pIPtr);
+    }
+    if(ozadje){
+        printf("Background: 1\n");
     }
 }
 
