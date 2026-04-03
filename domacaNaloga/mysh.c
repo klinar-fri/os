@@ -38,15 +38,18 @@ LineInfo stringCleanup(char* line){
             foundComment = true;
             commentPointer = nP;
         }
-        // TODO -> stringe ne sme odstarnit space-ov znotraj !!!
         if(line[p] == '"'){
-            while (line[p] != '"' && line[p] != '\0'){
+            newLine[nP++] = line[p++];
+            while(line[p] != '"' && line[p] != '\0'){
                 newLine[nP++] = line[p++];
             }
-            newLine[nP++] = line[p++];
-        }
-        while (line[p] != ' ' && line[p] != '\0'){
-            newLine[nP++] = line[p++];
+            if(line[p] == '"'){
+                newLine[nP++] = line[p++];
+            }
+        }else{
+            while (line[p] != ' ' && line[p] != '"' && line[p] != '\0'){
+                newLine[nP++] = line[p++];
+            }
         }
         while (line[p] == ' ') p++;
         if (line[p] != '\0'){
@@ -62,6 +65,16 @@ LineInfo stringCleanup(char* line){
     return li;
 }
 
+void parseTokens(int* tokenCount, char** tokens){
+    if(*tokenCount > 3){
+        *tokenCount -= 1;
+        for(int i = 0; i < 3; i++){
+            printf("%d: %s\n", *tokenCount, tokens[*tokenCount]);
+            *tokenCount -= 1;
+        }
+    }
+}
+
 void tokenizeInput(char* imeLupine, char* line, char** tokens, char version){
     int tokenCount = 0;
     int lineSize = strlen(line);
@@ -69,17 +82,18 @@ void tokenizeInput(char* imeLupine, char* line, char** tokens, char version){
 
     LineInfo li = stringCleanup(line);
     printf("Input line: '%s'\n", line);
-    printf("Input line: '%s'\n", li.line);
     if(li.onlySpace) return;
 
     int i = 0;
     char* zacetek = li.line;
+    bool niz = false;
     while(li.line[i] != '\0'){
         if(li.hasComment && i == li.commentPointer){
             goto END;
         }
-        // TODO -> za stringe da jih ne da narazen !!! 
-        if(li.line[i] == ' '){
+        if(li.line[i] == '"'){
+            niz = !niz;
+        }else if (li.line[i] == ' ' && !niz){
             li.line[i] = '\0';
             tokens[tokenCount] = zacetek;
             tokenCount++;
@@ -90,10 +104,21 @@ void tokenizeInput(char* imeLupine, char* line, char** tokens, char version){
     }
     tokens[tokenCount] = zacetek;
     tokenCount++;
+
     END:
+    // tle odstranimo še " "
+    for(int i = 0; i < tokenCount; i++){
+        char* ptr = tokens[i];
+        if(*ptr == '"'){
+            int len = strlen(ptr);
+            ptr[len - 1] = '\0';
+            tokens[i] = ptr += 1;
+        }
+    }
     for(int j = 0; j < tokenCount; j++){
         printf("Token %d: '%s'\n", j, tokens[j]);
     }
+    parseTokens(&tokenCount, tokens);
 }
 
 int main(int argc, char** argv){
