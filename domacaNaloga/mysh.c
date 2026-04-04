@@ -4,15 +4,18 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <assert.h>
 
 #define MAX_LINE_SIZE 1024 
 int DEBUG_LEVEL = 0;
+char* PROMPT = "mysh";
+int STATUS = 0;
 
 typedef struct{
     const char* ime;
     const char* pomoc;
     // kazalec na funkcijo
-    int (*fPtr)(int*, char**);
+    int (*fPtr)();
 } Ukaz;
 
 // neka struktura samo za potrebe funkicje
@@ -72,6 +75,16 @@ LineInfo stringCleanup(char* line){
 }
 
 
+int exitCustom(int* tokenCount, char** tokens){
+    assert(*tokenCount <= 2);
+    if(*tokenCount == 2){
+        exit(atoi(tokens[1]));
+    }else{
+        exit(STATUS);
+    }
+    return 0;
+}
+
 int debug(int* tokenCount, char** tokens){
     int tc = *tokenCount;
     if(tc > 1){
@@ -91,6 +104,24 @@ int debug(int* tokenCount, char** tokens){
     return 0;
 }
 
+int prompt(int* tokenCount, char** tokens){
+    if(*tokenCount > 1){
+        if(strlen(tokens[1]) > 7){
+            return 1;
+        }else{
+            PROMPT = tokens[1];
+        }
+    }else{
+        printf("%s\n", PROMPT);
+    }
+    return 0;
+}
+
+int status(){
+    printf("%d\n", STATUS);
+    return STATUS;
+}
+
 int executeBuiltin(Ukaz u, int* tokenCount, char** tokens, bool* ozadje){
     if(DEBUG_LEVEL > 0){
         if(*ozadje){
@@ -102,10 +133,10 @@ int executeBuiltin(Ukaz u, int* tokenCount, char** tokens, bool* ozadje){
     u.fPtr(tokenCount, tokens);
 }
 
-int executeExternal(int* tokenCount, char** tokens){
+int executeExternal(int* tokenCount, char** tokens, int* endingModifiers){
     printf("External command '");
     bool first = true;
-    for(int i = 0; i < *tokenCount; i++){
+    for(int i = 0; i < *tokenCount - *endingModifiers; i++){
         if(first){
             printf("%s", tokens[i]);
             first = false;
@@ -118,18 +149,38 @@ int executeExternal(int* tokenCount, char** tokens){
 }
 
 Ukaz ukazi[] = {
-    {"debug", "pomoc ni implementirana!", &debug},
-    // {"prompt", "pomoc ni implementirana!", prompt}
+    {"debug", "Help for the debug command (active when debug > 0) :\n -> 'debug'         : print the current debug level\n -> 'debug' <level> : change the current debug level\n", &debug},
+    {"prompt", "pomoc ni implementirana!", &prompt},
+    {"status", "pomoc ni implementirana!", &status},
+    {"exit", "pomoc ni implementirana!", &exitCustom},
+    {"help", "Help for the help command :\n -> help <command_name> : display the help info for the specified command\n", NULL},
 };
 
-int findBuiltin(int* tokenCount, char** tokens, bool* ozadje){
+int findBuiltin(int* tokenCount, char** tokens, bool* ozadje, int* endingModifiers){
     int steviloUkazov = sizeof(ukazi) / sizeof(Ukaz);
+    int stUkDup = steviloUkazov;
     for(int i = 0; i < steviloUkazov; i++){
+        if(strcmp(tokens[0], "help") == 0){
+            if(*tokenCount == 2){
+                for(int j = 0; j < stUkDup; j++){
+                    if(strcmp(tokens[1], ukazi[j].ime) == 0){
+                        printf("%s", ukazi[j].pomoc);
+                        return 0;
+                    }
+                }
+                printf("Command %s is not builtin!\n", tokens[1]);
+                return 1;
+            }else{
+                // mal slabo ker je hard-codan, ukaz[5] je help za help
+                printf("%s", ukazi[4].pomoc);
+                return 0;
+            }
+        }
         if(strcmp(tokens[0], ukazi[i].ime) == 0){
             return executeBuiltin(ukazi[i], tokenCount, tokens, ozadje);
         }
     }
-    return executeExternal(tokenCount, tokens);
+    return executeExternal(tokenCount, tokens, endingModifiers);
 }
 
 void parseTokens(int tokenCount, char** tokens){
@@ -139,6 +190,8 @@ void parseTokens(int tokenCount, char** tokens){
     char* pVPtr = NULL;
     bool ozadje = false;
     int tknCpy = tokenCount;
+    
+    int endingModifiers = 0;
 
     tokenCount -= 1;
     int diff = 3 < tokenCount - 1 ? 3 : tokenCount - 1;
@@ -146,14 +199,17 @@ void parseTokens(int tokenCount, char** tokens){
     for(int i = 0; i < diff; i++){
         if(tokens[tokenCount][0] == '&' && strlen(tokens[tokenCount]) == 1){
             ozadje = true;
+            endingModifiers++;
         }
         if(tokens[tokenCount][0] == '>'){
             preusmeritevIzhoda = true;
             pIPtr = tokens[tokenCount] + 1;
+            endingModifiers++;
         }
         if(tokens[tokenCount][0] == '<'){
             preusmeritevVhoda= true;
             pVPtr = tokens[tokenCount] + 1;
+            endingModifiers++;
         }
         tokenCount -= 1;
     }
@@ -170,8 +226,7 @@ void parseTokens(int tokenCount, char** tokens){
         }
     }
 
-    int status = findBuiltin(&tknCpy, tokens, &ozadje);
-    // printf("STATUS: %d\n", status);
+    STATUS = findBuiltin(&tknCpy, tokens, &ozadje, &endingModifiers);
 }
 
 int tokenizeInput(char* imeLupine, char* line, char** tokens, char version){
