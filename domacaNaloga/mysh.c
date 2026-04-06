@@ -150,9 +150,9 @@ int executeExternal(int* tokenCount, char** tokens, int* endingModifiers){
 
 Ukaz ukazi[] = {
     {"debug", "Help for the debug command (active when debug > 0) :\n -> 'debug'         : print the current debug level\n -> 'debug' <level> : change the current debug level\n", &debug},
-    {"prompt", "pomoc ni implementirana!", &prompt},
-    {"status", "pomoc ni implementirana!", &status},
-    {"exit", "pomoc ni implementirana!", &exitCustom},
+    {"prompt", "Help for the prompt command : \n -> 'prompt'         : print the current prompt\n -> 'debug' <string> : change the current prompt to string\n", &prompt},
+    {"status", "Help for the status command : \n -> 'status' : print the status of the last executed command\n ", &status},
+    {"exit", "Help for the exit command : \n -> 'exit'          : close the shell with the last executed command exit status\n -> 'exit' <status> : exit the shell with the given exit status\n", &exitCustom},
     {"help", "Help for the help command :\n -> help <command_name> : display the help info for the specified command\n", NULL},
 };
 
@@ -226,7 +226,11 @@ void parseTokens(int tokenCount, char** tokens){
         }
     }
 
-    STATUS = findBuiltin(&tknCpy, tokens, &ozadje, &endingModifiers);
+    if(!ozadje){
+        STATUS = findBuiltin(&tknCpy, tokens, &ozadje, &endingModifiers);
+    }else{
+        findBuiltin(&tknCpy, tokens, &ozadje, &endingModifiers);
+    }
 }
 
 int tokenizeInput(char* imeLupine, char* line, char** tokens, char version){
@@ -292,6 +296,7 @@ int main(int argc, char** argv){
             parseTokens(tokenCount, tokens);
         }else{
             if(fgets(line, MAX_LINE_SIZE, stdin) == NULL) break;
+            // printf("-%s", line);
             int tokenCount = tokenizeInput(imeLupine, line, tokens, 'N');
             parseTokens(tokenCount, tokens);
         }
