@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <errno.h>
 #include <assert.h>
 
 #define MAX_LINE_SIZE 1024 
@@ -74,6 +75,7 @@ LineInfo stringCleanup(char* line){
     return li;
 }
 
+// -------------------------------------------------------------------------
 
 int exitCustom(int* tokenCount, char** tokens){
     assert(*tokenCount <= 2);
@@ -241,6 +243,43 @@ int dirname(int* tokenCount, char** tokens){
     }
 }
 
+int dirch(int* tokenCount, char** tokens){
+    if(*tokenCount == 1){
+        if(chdir("/") < 0){
+            // perror("ERROR! ");
+            return errno;
+        }
+    }else{
+        if(chdir(tokens[1]) < 0){
+            // perror("ERROR! ");
+            return errno;
+        }
+    }
+    return 0;
+}
+
+int dirwd(int* tokenCount, char** tokens){
+
+}
+
+// -------------------------------------------------------------------------
+
+Ukaz ukazi[] = {
+    {"debug", "Help for the debug command (active when debug > 0) :\n -> 'debug'         : print the current debug level\n -> 'debug' <level> : change the current debug level\n", &debug},
+    {"prompt", "Help for the prompt command : \n -> 'prompt'         : print the current prompt\n -> 'debug' <string> : change the current prompt to string\n", &prompt},
+    {"status", "Help for the status command : \n -> 'status' : print the status of the last executed command\n ", &status},
+    {"exit", "Help for the exit command : \n -> 'exit'          : close the shell with the last executed command exit status\n -> 'exit' <status> : exit the shell with the given exit status\n", &exitCustom},
+    {"help", "Help for the help command :\n -> help <command_name> : display the help info for the specified command\n", NULL},
+    {"print", "Help for the print command :\n -> print <args...> : print the given arguments to stdout without newline\n", &print},
+    {"echo", "Help for the echo command :\n -> <echo args...> : print the given arguments to stdout and add newline\n", &echo},
+    {"len", "Help for the len command :\n -> len <args...> : print the length of the arguments (total string length (number of characters))\n", &len},
+    {"sum", "Help for the sum command :\n -> sum <args...> : print the sum of the arguments (the arguments must be whole numbers, it will fail on type error) \n", &sum},
+    {"calc", "Help for the calc command :\n -> calc <arg1 op arg2> : calculate the given operation ('+', '-', '*', '/', '%%') between the two arguments\n", &calc},
+    {"basename", "Help for the basename command :\n -> basename <path> : prints the base name of the given path (like command basename in bash)\n", &basename},
+    {"dirname", "Help for the dirname command :\n -> dirname <path> : prints the dir name of the given path (like command dirname in bash)\n", &dirname},
+    {"dirch", "Help for the dirch command :\n -> dirch <directory_path> : change the current working directory (root if not specified) \n", &dirch},
+    {"dirwd", "Help for the dirwd command :\n -> dirwd <mode> : print the current working directory\n     modes : 'full' (print the whole path)\n           : 'base' (print the basename, this is default)\n", &dirwd},
+};
 
 int executeBuiltin(Ukaz u, int* tokenCount, char** tokens, bool* ozadje){
     if(DEBUG_LEVEL > 0){
@@ -268,20 +307,6 @@ int executeExternal(int* tokenCount, char** tokens, int* endingModifiers){
     return 0;
 }
 
-Ukaz ukazi[] = {
-    {"debug", "Help for the debug command (active when debug > 0) :\n -> 'debug'         : print the current debug level\n -> 'debug' <level> : change the current debug level\n", &debug},
-    {"prompt", "Help for the prompt command : \n -> 'prompt'         : print the current prompt\n -> 'debug' <string> : change the current prompt to string\n", &prompt},
-    {"status", "Help for the status command : \n -> 'status' : print the status of the last executed command\n ", &status},
-    {"exit", "Help for the exit command : \n -> 'exit'          : close the shell with the last executed command exit status\n -> 'exit' <status> : exit the shell with the given exit status\n", &exitCustom},
-    {"help", "Help for the help command :\n -> help <command_name> : display the help info for the specified command\n", NULL},
-    {"print", "Help for the print command :\n -> print <args...> : print the given arguments to stdout without newline\n", &print},
-    {"echo", "Help for the echo command :\n -> <echo args...> : print the given arguments to stdout and add newline\n", &echo},
-    {"len", "Help for the len command :\n -> len <args...> : print the length of the arguments (total string length (number of characters))\n", &len},
-    {"sum", "Help for the sum command :\n -> sum <args...> : print the sum of the arguments (the arguments must be whole numbers, it will fail on type error) \n", &sum},
-    {"calc", "Help for the calc command :\n -> calc <arg1 op arg2> : calculate the given operation ('+', '-', '*', '/', '%%') between the two arguments\n", &calc},
-    {"basename", "Help for the basename command :\n -> basename <path> : prints the base name of the given path (like command basename in bash)\n", &basename},
-    {"dirname", "Help for the dirname command :\n -> dirname <path> : prints the dir name of the given path (like command dirname in bash)\n", &dirname},
-};
 
 int findBuiltin(int* tokenCount, char** tokens, bool* ozadje, int* endingModifiers){
     int steviloUkazov = sizeof(ukazi) / sizeof(Ukaz);
