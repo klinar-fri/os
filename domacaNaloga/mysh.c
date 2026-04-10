@@ -233,12 +233,13 @@ void parseTokens(int tokenCount, char** tokens){
     }
 }
 
-int tokenizeInput(char* imeLupine, char* line, char** tokens, char version){
+int tokenizeInput(char* imeLupine, char* line, char** tokens, char* toFree){
     int tokenCount = 0;
     int lineSize = strlen(line);
     if(line[lineSize - 1] == '\n') line[lineSize - 1] = '\0';
 
     LineInfo li = stringCleanup(line);
+    toFree = li.line;
     if(DEBUG_LEVEL > 0) printf("Input line: '%s'\n", line);
     if(li.onlySpace) return 0;
 
@@ -289,17 +290,19 @@ int main(int argc, char** argv){
 
     while(true){
         char* line = malloc(MAX_LINE_SIZE*sizeof(char));
+        char* toFree = NULL;
         if(isatty(STDIN_FILENO)){
             printf("%s", imeLupine);
             fgets(line, MAX_LINE_SIZE, stdin);
-            int tokenCount = tokenizeInput(imeLupine, line, tokens, 'I');
-            parseTokens(tokenCount, tokens);
+            int tokenCount = tokenizeInput(imeLupine, line, tokens, toFree);
+            if(tokenCount > 0) parseTokens(tokenCount, tokens);
         }else{
             if(fgets(line, MAX_LINE_SIZE, stdin) == NULL) break;
             // printf("-%s", line);
-            int tokenCount = tokenizeInput(imeLupine, line, tokens, 'N');
-            parseTokens(tokenCount, tokens);
+            int tokenCount = tokenizeInput(imeLupine, line, tokens, toFree);
+            if(tokenCount > 0) parseTokens(tokenCount, tokens);
         }
         free(line);
+        if(toFree != NULL) free(toFree);
     }
 }
