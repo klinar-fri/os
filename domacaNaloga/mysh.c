@@ -122,6 +122,126 @@ int status(){
     return STATUS;
 }
 
+int print(int* tokenCount, char** tokens){
+    bool prvi = true;
+    for(int i = 1; i < *tokenCount; i++){
+        if(prvi){
+            printf("%s", tokens[i]);
+            prvi = false;
+        }else{
+            printf(" %s", tokens[i]);
+        }
+    }
+    return 0;
+}
+
+int echo(int* tokenCount, char** tokens){
+    bool prvi = true;
+    for(int i = 1; i < *tokenCount; i++){
+        if(prvi){
+            printf("%s", tokens[i]);
+            prvi = false;
+        }else{
+            printf(" %s", tokens[i]);
+        }
+    }
+    printf("\n");
+    return 0;
+}
+
+int len(int* tokenCount, char** tokens){
+    int dolzina = 0;
+    for(int i = 1; i < *tokenCount; i++){
+        dolzina += strlen(tokens[i]);
+    }
+    printf("%d\n", dolzina);
+    return 0;
+}
+
+int sum(int* tokenCount, char** tokens){
+    int vsota = 0;
+    for(int i = 1; i < *tokenCount; i++){
+        bool pravaOblika = true;
+        int j = 0;
+        while(tokens[i][j] != '\0'){
+            if(isalpha(tokens[i][j])){
+                pravaOblika = false;
+                break;
+            }
+            j++;
+        }
+        if(pravaOblika){
+            vsota += atoi(tokens[i]);
+        }else{
+            printf("ERROR! : arguments must be whole numbers!\n");
+            return 1;
+        }
+    }
+    printf("%d\n", vsota);
+    return 0;
+}
+
+// tuki ne bom preverjal pravilnosti dejanskih argumentov / operatorjev preveč
+int calc(int* tokenCount, char** tokens){
+    if(*tokenCount == 4){
+        if(strcmp(tokens[2], "+") == 0){
+            printf("%d\n", atoi(tokens[1]) + atoi(tokens[3]));
+        }else if(strcmp(tokens[2], "-") == 0){
+            printf("%d\n", atoi(tokens[1]) - atoi(tokens[3]));
+        }else if(strcmp(tokens[2], "*") == 0){
+            printf("%d\n", atoi(tokens[1]) * atoi(tokens[3]));
+        }else if(strcmp(tokens[2], "/") == 0){
+            printf("%d\n", atoi(tokens[1]) / atoi(tokens[3]));
+        }else if(tokens[2][0] == '%'){
+            printf("%d\n", atoi(tokens[1]) % atoi(tokens[3]));
+        }else{
+            printf("ERROR! : expected op to be one of these {'+', '-', '*', '/', '%%'}!\n");
+        }
+    }else{
+        printf("ERROR! : expected : calc <arg1 op arg2>!\n");
+        return 1;
+    }
+    return 0;
+}
+
+int basename(int* tokenCount, char** tokens){
+    if(*tokenCount == 2){
+        int lastSp = 0;
+        int i = 0;
+        while(tokens[1][i] != '\0'){
+            if(tokens[1][i] == '/'){
+                lastSp = i;
+            }
+            i++;
+        }
+        printf("%s\n", tokens[1] + lastSp + 1);
+        return 0;
+    }else{
+        // printf("ERROR! : expected : basename <path>!\n");
+        return 1;
+    }
+}
+
+int dirname(int* tokenCount, char** tokens){
+    if(*tokenCount == 2){
+        int lastSp = 0;
+        int i = 0;
+        while(tokens[1][i] != '\0'){
+            if(tokens[1][i] == '/'){
+                lastSp = i;
+            }
+            i++;
+        }
+        tokens[1][lastSp] = '\0';
+        printf("%s\n", tokens[1]);
+        return 0;
+    }else{
+        // printf("ERROR! : expected : basename <path>!\n");
+        return 1;
+    }
+}
+
+
 int executeBuiltin(Ukaz u, int* tokenCount, char** tokens, bool* ozadje){
     if(DEBUG_LEVEL > 0){
         if(*ozadje){
@@ -154,6 +274,13 @@ Ukaz ukazi[] = {
     {"status", "Help for the status command : \n -> 'status' : print the status of the last executed command\n ", &status},
     {"exit", "Help for the exit command : \n -> 'exit'          : close the shell with the last executed command exit status\n -> 'exit' <status> : exit the shell with the given exit status\n", &exitCustom},
     {"help", "Help for the help command :\n -> help <command_name> : display the help info for the specified command\n", NULL},
+    {"print", "Help for the print command :\n -> print <args...> : print the given arguments to stdout without newline\n", &print},
+    {"echo", "Help for the echo command :\n -> <echo args...> : print the given arguments to stdout and add newline\n", &echo},
+    {"len", "Help for the len command :\n -> len <args...> : print the length of the arguments (total string length (number of characters))\n", &len},
+    {"sum", "Help for the sum command :\n -> sum <args...> : print the sum of the arguments (the arguments must be whole numbers, it will fail on type error) \n", &sum},
+    {"calc", "Help for the calc command :\n -> calc <arg1 op arg2> : calculate the given operation ('+', '-', '*', '/', '%%') between the two arguments\n", &calc},
+    {"basename", "Help for the basename command :\n -> basename <path> : prints the base name of the given path (like command basename in bash)\n", &basename},
+    {"dirname", "Help for the dirname command :\n -> dirname <path> : prints the dir name of the given path (like command dirname in bash)\n", &dirname},
 };
 
 int findBuiltin(int* tokenCount, char** tokens, bool* ozadje, int* endingModifiers){
@@ -305,4 +432,5 @@ int main(int argc, char** argv){
         free(line);
         if(toFree != NULL) free(toFree);
     }
+    return STATUS;
 }
