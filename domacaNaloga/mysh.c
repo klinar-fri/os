@@ -5,7 +5,8 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <errno.h>
-#include <assert.h>
+#include <dirent.h>
+#include <sys/stat.h>
 
 #define MAX_LINE_SIZE 1024 
 int DEBUG_LEVEL = 0;
@@ -78,7 +79,6 @@ LineInfo stringCleanup(char* line){
 // -------------------------------------------------------------------------
 
 int exitCustom(int* tokenCount, char** tokens){
-    assert(*tokenCount <= 2);
     if(*tokenCount == 2){
         exit(atoi(tokens[1]));
     }else{
@@ -259,7 +259,82 @@ int dirch(int* tokenCount, char** tokens){
 }
 
 int dirwd(int* tokenCount, char** tokens){
+    if(*tokenCount == 1){
+        char dir[256];
+        getcwd(dir, 256);
+        int lastSp = 0;
+        int i = 0;
+        while(dir[i] != '\0'){
+            if(dir[i] == '/'){
+                lastSp = i;
+            }
+            i++;
+        }
+        printf("%s\n", dir + lastSp + 1);
+    }else{
+        if(strcmp(tokens[1], "full") == 0){
+            char dir[256];
+            printf("%s\n", getcwd(dir, 256));
+        }else if(strcmp(tokens[1], "base") == 0){
+            char dir[256];
+            getcwd(dir, 256);
+            int lastSp = 0;
+            int i = 0;
+            while(dir[i] != '\0'){
+                if(dir[i] == '/'){
+                    lastSp = i;
+                }
+                i++;
+            }
+            printf("%s\n", dir + lastSp + 1);
+        }
+    }
+    return 0;
+}
 
+int dirmk(int* tokenCount, char** tokens){
+    if(*tokenCount >= 2){
+        if(mkdir(tokens[1], 0755) < 0){
+            // perror("ERROR! ");
+            return errno;
+        }
+    }else{
+        printf("ERROR! : expected dirmk <directory_name>!\n");
+        return 1;
+    }
+    return 0;
+}
+
+int dirrm(int* tokenCount, char** tokens){
+    if(*tokenCount >= 2){
+        if(rmdir(tokens[1]) < 0){
+            perror("ERROR! ");
+            return errno;
+        }
+    }
+    return 0;
+}
+
+int dirls(int* tokenCount, char** tokens){
+    DIR* dir;
+    if(*tokenCount == 1){
+        dir = opendir(".");
+    }else{
+        dir = opendir(tokens[1]);
+    }
+    struct dirent* entry;
+    bool prvi = true;
+    while((entry = readdir(dir)) != 0){
+        if(prvi){
+            printf("%s", entry->d_name);
+            prvi = false;
+        }else{
+            printf("  %s", entry->d_name);
+        }
+    }
+    printf("\n");
+    closedir(dir);
+    return 0;
 }
 
 // -------------------------------------------------------------------------
@@ -279,6 +354,9 @@ Ukaz ukazi[] = {
     {"dirname", "Help for the dirname command :\n -> dirname <path> : prints the dir name of the given path (like command dirname in bash)\n", &dirname},
     {"dirch", "Help for the dirch command :\n -> dirch <directory_path> : change the current working directory (root if not specified) \n", &dirch},
     {"dirwd", "Help for the dirwd command :\n -> dirwd <mode> : print the current working directory\n     modes : 'full' (print the whole path)\n           : 'base' (print the basename, this is default)\n", &dirwd},
+    {"dirmk", "Help for the dirmk command :\n -> dirmk <directory_name> : make a directory with the given name\n", &dirmk},
+    {"dirrm", "Help for the dirrm command :\n -> dirrm <directory_name> : remove the directory with the given name\n", &dirrm},
+    {"dirls", "Help for the dirls command :\n -> dirls <directory_name> : print the names of the files in the given directory (default is cwd)\n", &dirls},
 };
 
 int executeBuiltin(Ukaz u, int* tokenCount, char** tokens, bool* ozadje){
