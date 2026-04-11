@@ -7,6 +7,11 @@
 #include <errno.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <fcntl.h>
+
+// za cpcat
+#define BUFFER_SIZE 1024 
+#define BUFFER_ALLOC char* buffer = malloc(BUFFER_SIZE*sizeof(char));
 
 #define MAX_LINE_SIZE 1024 
 int DEBUG_LEVEL = 0;
@@ -390,6 +395,204 @@ int dirls(int* tokenCount, char** tokens){
     return 0;
 }
 
+int renameFile(int* tokenCount, char** tokens){
+    if(*tokenCount == 3){
+        if(rename(tokens[1], tokens[2]) < 0){
+            int koda = errno;
+            return koda;
+        }
+    }else{
+        return 1;
+    }
+    return 0;
+}
+
+int unlinkFile(int* tokenCount, char** tokens){
+    if(*tokenCount == 2){
+        if(unlink(tokens[1]) < 0){
+            int koda = errno;
+            return koda;
+        }
+    }else{
+        return 1;
+    }
+    return 0;
+}
+
+int removeFile(int* tokenCount, char** tokens){
+    if(*tokenCount == 2){
+        if(remove(tokens[1]) < 0){
+            int koda = errno;
+            return koda;
+        }
+    }else{
+        return 1;
+    }
+    return 0;
+}
+
+int linkhard(int* tokenCount, char** tokens){
+    if(*tokenCount == 3){
+        if(link(tokens[1], tokens[2]) < 0){
+            int koda = errno;
+            return errno;
+        }
+    }else{
+        return 1;
+    }
+    return 0;
+}
+
+int linksoft(int* tokenCount, char** tokens){
+    if(*tokenCount == 3){
+        if(symlink(tokens[1], tokens[2]) < 0){
+            int koda = errno;
+            return koda;
+        }
+    }else{
+        return 1;
+    }
+    return 0;
+}
+
+int linkread(int* tokenCount, char** tokens){
+    if(*tokenCount == 2){
+        char* buffer = malloc(1024*sizeof(char));
+        if(readlink(tokens[1], buffer, 1024) < 0){
+            int koda = errno;
+            return errno;
+        }
+        printf("%s\n", buffer);
+        free(buffer);
+    }else{
+        return 1;
+    }
+    return 0;
+}
+
+int linklist(int* tokenCount, char** tokens){
+    if(*tokenCount == 2){
+        struct stat s;
+        if(stat(tokens[1], &s) < 0){
+            int koda = errno;
+            return koda;
+        }
+
+        DIR* dir = opendir(".");
+        struct dirent* entry;
+        bool prvi = true;
+        while((entry = readdir(dir)) != 0){
+            struct stat is;
+            if(lstat(entry->d_name, &is) < 0){
+                int koda = errno;
+                closedir(dir);
+                return koda;
+            }
+
+            if(s.st_ino == is.st_ino && s.st_dev == is.st_dev){
+                if(prvi){
+                    printf("%s", entry->d_name);
+                    prvi = false;
+                }else{
+                    printf("  %s", entry->d_name);
+                }
+            }
+        }
+        printf("\n");
+        closedir(dir);
+        return 0;
+    }else{
+        return 1;
+    }
+    return 0;
+}
+
+
+int cpcat(int* tokenCount, char** tokens){
+    // stdin -> stdout
+    BUFFER_ALLOC
+    int vhodniDeskriptor = STDIN_FILENO;
+    int izhodniDeskriptor = STDOUT_FILENO;
+
+    if(*tokenCount == 2){
+        // datoteka -> stdout
+        vhodniDeskriptor = open(tokens[1], O_RDONLY);
+        if(vhodniDeskriptor < 0){
+            int koda = errno;
+            // perror("ERROR [odpiranje arg_1]");
+            perror("cpcat");
+            free(buffer);
+            return koda;
+        }
+    }else if(*tokenCount == 3){
+        // stdin -> datoteka
+        if(strcmp(tokens[1], "-") == 0){
+            izhodniDeskriptor = open(tokens[2], O_CREAT | O_WRONLY | O_TRUNC , 0644);
+            if(izhodniDeskriptor < 0){
+                int koda = errno;
+                // perror("ERROR [odpiranje arg_2]");
+                perror("cpcat");
+                free(buffer);
+                return koda;
+            }
+        }else{
+            // datoteka a -> datoteka b
+            vhodniDeskriptor = open(tokens[1], O_RDONLY);
+            if(vhodniDeskriptor < 0){
+                int koda = errno;
+                // perror("ERROR [odpiranje arg_1] (ste morda mislili '-' namesto '_')");
+                perror("cpcat");
+                free(buffer);
+                return koda;
+            }
+
+            izhodniDeskriptor = open(tokens[2], O_CREAT | O_WRONLY | O_TRUNC , 0644);
+            if(izhodniDeskriptor < 0){
+                int koda = errno;
+                // perror("ERROR [odpiranje]");
+                perror("cpcat");
+                free(buffer);
+                return koda;
+            }
+        }
+    }else if(*tokenCount > 3){
+        printf("ERROR! : too many arguments, expected : cpcat <source destination>\n");
+        return 1;
+    }
+
+    int prebraniBajti = 0;
+    char lastChar = '\0';
+    while ((prebraniBajti = read(vhodniDeskriptor, buffer, BUFFER_SIZE)) > 0) {
+        if (write(izhodniDeskriptor, buffer, prebraniBajti) != prebraniBajti) {
+            perror("cpcat");
+            free(buffer);
+            return errno;
+        }
+        lastChar = buffer[prebraniBajti - 1];
+    }
+
+    if (prebraniBajti == 0 && lastChar != '\0' && lastChar != '\n') {
+        if (write(izhodniDeskriptor, "\n", 1) < 0) {
+            perror("cpcat");
+            free(buffer);
+            return errno;
+        }
+    }
+
+    if(prebraniBajti < 0){
+        int koda = errno;
+        // perror("ERROR [branje arg_2]");
+        perror("cpcat");
+        free(buffer);
+        return koda;
+    }
+
+    if(vhodniDeskriptor > 2) close(vhodniDeskriptor);
+    if(izhodniDeskriptor > 2) close(izhodniDeskriptor);
+    free(buffer);
+    return 0;
+}
+
 // -------------------------------------------------------------------------
 
 Ukaz ukazi[] = {
@@ -410,6 +613,14 @@ Ukaz ukazi[] = {
     {"dirmk", "Help for the dirmk command :\n -> dirmk <directory_name> : make a directory with the given name\n", &dirmk},
     {"dirrm", "Help for the dirrm command :\n -> dirrm <directory_name> : remove the directory with the given name\n", &dirrm},
     {"dirls", "Help for the dirls command :\n -> dirls <directory_name> : print the names of the files in the given directory (default is cwd)\n", &dirls},
+    {"rename", "Help for the rename command :\n -> rename <current_name new_name> : rename the file\n", &renameFile},
+    {"unlink", "Help for the unlink command :\n -> unlink <name> : unlink the given file (remove only the directory entry)\n", &unlinkFile},
+    {"remove", "Help for the remove command :\n -> remove <name> : remove the given file or directory\n", &removeFile},
+    {"linkhard", "Help for the linkhard command :\n -> linkhard <destination name> : creates a hard link with the given name and destination\n", &linkhard},
+    {"linksoft", "Help for the linksoft command :\n -> linksoft <destination name> : creates a symbolic (soft) link with the given name and destination\n", &linksoft},
+    {"linkread", "Help for the linkread command :\n -> linkread <name> : print the destination of the symbolic (soft) link\n", &linkread},
+    {"linklist", "Help for the linklist command :\n -> linklist <name> : print all hard links to a given file name in the current working directory\n", &linklist},
+    {"cpcat", "Help for the cpcat command :\n -> cpcat <source destination> : cp & cat combined (see cpcat.c)\n", &cpcat},
 };
 
 int executeBuiltin(Ukaz u, int* tokenCount, char** tokens, bool* ozadje){
