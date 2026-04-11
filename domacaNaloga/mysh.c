@@ -17,7 +17,7 @@ typedef struct{
     const char* ime;
     const char* pomoc;
     // kazalec na funkcijo
-    int (*fPtr)();
+    int (*fPtr)(int*, char**);
 } Ukaz;
 
 // neka struktura samo za potrebe funkicje
@@ -116,11 +116,15 @@ int prompt(int* tokenCount, char** tokens){
     }else{
         printf("%s\n", PROMPT);
     }
+    fflush(stdout);
+    fflush(stderr);
     return 0;
 }
 
 int status(){
     printf("%d\n", STATUS);
+    fflush(stdout);
+    fflush(stderr);
     return STATUS;
 }
 
@@ -134,6 +138,8 @@ int print(int* tokenCount, char** tokens){
             printf(" %s", tokens[i]);
         }
     }
+    fflush(stdout);
+    fflush(stderr);
     return 0;
 }
 
@@ -148,6 +154,8 @@ int echo(int* tokenCount, char** tokens){
         }
     }
     printf("\n");
+    fflush(stdout);
+    fflush(stderr);
     return 0;
 }
 
@@ -216,7 +224,15 @@ int basename(int* tokenCount, char** tokens){
             }
             i++;
         }
-        printf("%s\n", tokens[1] + lastSp + 1);
+        if(i == 1){
+            printf("%s\n", tokens[1] + lastSp);
+            fflush(stdout);
+            fflush(stderr);
+        }else{
+            printf("%s\n", tokens[1] + lastSp + 1);
+            fflush(stdout);
+            fflush(stderr);
+        }
         return 0;
     }else{
         // printf("ERROR! : expected : basename <path>!\n");
@@ -234,8 +250,13 @@ int dirname(int* tokenCount, char** tokens){
             }
             i++;
         }
-        tokens[1][lastSp] = '\0';
-        printf("%s\n", tokens[1]);
+        char* cpy = malloc(100 * sizeof(char));
+        strcpy(cpy, tokens[1]);
+        cpy[lastSp] = '\0';
+        printf("%s\n", cpy);
+        free(cpy);
+        fflush(stdout);
+        fflush(stderr);
         return 0;
     }else{
         // printf("ERROR! : expected : basename <path>!\n");
@@ -246,13 +267,19 @@ int dirname(int* tokenCount, char** tokens){
 int dirch(int* tokenCount, char** tokens){
     if(*tokenCount == 1){
         if(chdir("/") < 0){
-            // perror("ERROR! ");
-            return errno;
+            int koda = errno;
+            perror("dirch");
+            fflush(stdout);
+            fflush(stderr);
+            return koda;
         }
     }else{
         if(chdir(tokens[1]) < 0){
-            // perror("ERROR! ");
-            return errno;
+            int koda = errno;
+            perror("dirch");
+            fflush(stdout);
+            fflush(stderr);
+            return koda;
         }
     }
     return 0;
@@ -270,11 +297,21 @@ int dirwd(int* tokenCount, char** tokens){
             }
             i++;
         }
-        printf("%s\n", dir + lastSp + 1);
+        if(i == 1){
+            printf("%s\n", dir + lastSp);
+            fflush(stdout);
+            fflush(stderr);
+        }else{
+            printf("%s\n", dir + lastSp + 1);
+            fflush(stdout);
+            fflush(stderr);
+        }
     }else{
         if(strcmp(tokens[1], "full") == 0){
             char dir[256];
             printf("%s\n", getcwd(dir, 256));
+            fflush(stdout);
+            fflush(stderr);
         }else if(strcmp(tokens[1], "base") == 0){
             char dir[256];
             getcwd(dir, 256);
@@ -286,7 +323,15 @@ int dirwd(int* tokenCount, char** tokens){
                 }
                 i++;
             }
-            printf("%s\n", dir + lastSp + 1);
+            if(i == 1){
+                printf("%s\n", dir + lastSp);
+                fflush(stdout);
+                fflush(stderr);
+            }else{
+                printf("%s\n", dir + lastSp + 1);
+                fflush(stdout);
+                fflush(stderr);
+            }
         }
     }
     return 0;
@@ -295,8 +340,11 @@ int dirwd(int* tokenCount, char** tokens){
 int dirmk(int* tokenCount, char** tokens){
     if(*tokenCount >= 2){
         if(mkdir(tokens[1], 0755) < 0){
-            // perror("ERROR! ");
-            return errno;
+            int koda = errno;
+            perror("dirmk");
+            fflush(stdout);
+            fflush(stderr);
+            return koda;
         }
     }else{
         printf("ERROR! : expected dirmk <directory_name>!\n");
@@ -308,8 +356,11 @@ int dirmk(int* tokenCount, char** tokens){
 int dirrm(int* tokenCount, char** tokens){
     if(*tokenCount >= 2){
         if(rmdir(tokens[1]) < 0){
-            perror("ERROR! ");
-            return errno;
+            int koda = errno;
+            perror("dirrm");
+            fflush(stdout);
+            fflush(stderr);
+            return koda;
         }
     }
     return 0;
@@ -333,6 +384,8 @@ int dirls(int* tokenCount, char** tokens){
         }
     }
     printf("\n");
+    fflush(stdout);
+    fflush(stderr);
     closedir(dir);
     return 0;
 }
@@ -367,7 +420,7 @@ int executeBuiltin(Ukaz u, int* tokenCount, char** tokens, bool* ozadje){
             printf("Executing builtin '%s' in foreground\n", tokens[0]);
         }
     }
-    u.fPtr(tokenCount, tokens);
+    return u.fPtr(tokenCount, tokens);
 }
 
 int executeExternal(int* tokenCount, char** tokens, int* endingModifiers){
