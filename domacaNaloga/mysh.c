@@ -14,6 +14,9 @@
 #define BUFFER_SIZE 1024 
 #define BUFFER_ALLOC char* buffer = malloc(BUFFER_SIZE*sizeof(char));
 
+// za proc
+char PATH[100] = "/proc";
+
 #define MAX_LINE_SIZE 1024 
 int DEBUG_LEVEL = 0;
 char* PROMPT = "mysh";
@@ -630,6 +633,119 @@ int sysinfo(int* tokenCount, char** tokens){
     printf("Sysname: %s\nNodename: %s\nRelease: %s\nVersion: %s\nMachine: %s\n", info.sysname, info.nodename, info.release, info.version, info.machine);
     return 0;
 }
+
+
+
+int proc(int* tokenCount, char** tokens){
+    if(*tokenCount == 2){
+        if(access(tokens[1], F_OK|R_OK) < 0){
+            return 1;
+        }
+        strcpy(&PATH[0], tokens[1]);
+        return 0;
+    }
+    printf("%s\n", PATH);
+    fflush(stdout);
+    fflush(stderr);
+    return 0;
+}
+
+int sort(int idx, int* tab){
+    for(int i = 0; i < idx - 1; i++){
+        for(int j = 0; j < idx - i - 1; j++){
+            if(tab[j + 1] < tab[j]){
+                int tmp = tab[j];
+                tab[j] = tab[j + 1];
+                tab[j + 1] = tmp;
+            }
+        }
+    }
+}
+
+int pids(int* tokenCount, char** tokens){
+    // const char* myPath = "../../../../proc";
+    int* pidTab = malloc(1000 * sizeof(int));
+    DIR* dir = opendir(PATH);
+    struct dirent* entry;
+    int idx = 0;
+    while((entry = readdir(dir)) != 0){
+        bool pid = true;
+        for(int i = 0; i < strlen(entry->d_name); i++){
+            if(entry->d_name[i] > '9' || entry->d_name[i] < '0'){
+                pid = false;
+                break;
+            }
+        }
+        if(pid){
+            // printf("%s\n", entry->d_name);
+            pidTab[idx] = atoi(entry->d_name);
+            idx++;
+        }
+    }
+    // bubble sort O(n^2).. ok
+    sort(idx, pidTab);
+    for(int j = 0; j < idx; j++){
+        printf("%d\n", pidTab[j]);
+        fflush(stdout);
+    }
+    free(pidTab);
+    closedir(dir);
+    return 0;
+}
+
+int pinfo(int* tokenCount, char** tokens){
+    const char* myPath = "../../../../proc";
+    int* pidTab = malloc(1000 * sizeof(int));
+    DIR* dir = opendir(PATH);
+    struct dirent* entry;
+    int idx = 0;
+    while((entry = readdir(dir)) != 0){
+        bool pid = true;
+        for(int i = 0; i < strlen(entry->d_name); i++){
+            if(entry->d_name[i] > '9' || entry->d_name[i] < '0'){
+                pid = false;
+                break;
+            }
+        }
+        if(pid){
+            pidTab[idx] = atoi(entry->d_name);
+            idx++;
+        }
+    }
+    // bubble sort O(n^2).. ok
+    sort(idx, pidTab);
+    printf("%5s %5s %6s %s\n", "PID", "PPID", "STANJE", "IME");
+    for(int j = 0; j < idx; j++){
+        char* currentStat = malloc(100*sizeof(char));
+        char* pathCpy = malloc(100*sizeof(char));
+        strcpy(pathCpy, PATH);
+        sprintf(currentStat, "/%d/stat", pidTab[j]);
+        strcat(pathCpy, currentStat);
+        // printf("%s\n", pathCpy);
+
+        FILE* fptr = fopen(pathCpy, "r");
+        if(!fptr){
+            printf("ERROR!\n");
+            return -1;
+        }
+        int pid;
+        int ppid;
+        char* name = malloc(100* sizeof(char));
+        char state;
+        fscanf(fptr, "%d %s %c %d", &pid, name, &state, &ppid);
+
+        name[strlen(name) - 1] = '\0';
+        printf("%5d %5d %6c %s\n", pid, ppid, state, name + 1);
+
+        free(name);
+        free(currentStat);
+        free(pathCpy);
+        fclose(fptr);
+        fflush(stdout);
+    }
+    free(pidTab);
+    closedir(dir);
+}
 // -------------------------------------------------------------------------
 
 Ukaz ukazi[] = {
@@ -665,6 +781,9 @@ Ukaz ukazi[] = {
     {"gid", "Help for the gid command :\n -> gid: print the group ID (gid), which the process is a part of\n", &gid},
     {"egid", "Help for the egid command :\n -> egid: print the effective group ID (egid), which the process is a part of\n", &egid},
     {"sysinfo", "Help for the sysinfo command :\n -> sysinfo: print the sysname, nodename, release, version and machine fields of the system information.\n", &sysinfo},
+    {"proc", "Help for the proc command :\n -> proc <path>: set the path to the procfs data system, no argument: print the current path (default is /proc), command detects if the path does not exist and fails!\n", &proc},
+    {"pids", "Help for the pids command :\n -> pids: print the PID-s of the current processes from the procfs data system\n", &pids},
+    {"pinfo", "Help for the pinfo command :\n -> pinfo: print the info of the current prcesses (PID, PPID, STATE, NAME) from the stat file in procfs\n", &pinfo},
 };
 
 int executeBuiltin(Ukaz u, int* tokenCount, char** tokens, bool* ozadje){
