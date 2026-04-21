@@ -8,6 +8,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/utsname.h>
 
 // za cpcat
 #define BUFFER_SIZE 1024 
@@ -593,6 +594,42 @@ int cpcat(int* tokenCount, char** tokens){
     return 0;
 }
 
+int pid(int* tokenCount, char** tokens){
+    printf("%d\n", getpid());
+    return 0;
+}
+
+int ppid(int* tokenCount, char** tokens){
+    printf("%d\n", getppid());
+    return 0;
+}
+
+int uid(int* tokenCount, char** tokens){
+    printf("%d\n", getuid());
+    return 0;
+}
+
+int euid(int* tokenCount, char** tokens){
+    printf("%d\n", geteuid());
+    return 0;
+}
+
+int gid(int* tokenCount, char** tokens){
+    printf("%d\n", getgid());
+    return 0;
+}
+
+int egid(int* tokenCount, char** tokens){
+    printf("%d\n", getegid());
+    return 0;
+}
+
+int sysinfo(int* tokenCount, char** tokens){
+    struct utsname info;
+    uname(&info);
+    printf("Sysname: %s\nNodename: %s\nRelease: %s\nVersion: %s\nMachine: %s\n", info.sysname, info.nodename, info.release, info.version, info.machine);
+    return 0;
+}
 // -------------------------------------------------------------------------
 
 Ukaz ukazi[] = {
@@ -621,6 +658,13 @@ Ukaz ukazi[] = {
     {"linkread", "Help for the linkread command :\n -> linkread <name> : print the destination of the symbolic (soft) link\n", &linkread},
     {"linklist", "Help for the linklist command :\n -> linklist <name> : print all hard links to a given file name in the current working directory\n", &linklist},
     {"cpcat", "Help for the cpcat command :\n -> cpcat <source destination> : cp & cat combined (see cpcat.c)\n", &cpcat},
+    {"pid", "Help for the pid command :\n -> pid : print the shell process ID (pid)\n", &pid},
+    {"ppid", "Help for the ppid command :\n -> pid : print the shell parent process ID (ppid)\n", &ppid},
+    {"uid", "Help for the uid command :\n -> uid: print the user ID (uid) of the user, who is the owner of the shell process\n", &uid},
+    {"euid", "Help for the euid command :\n -> euid: print the effective user ID (euid) of the user, who is the owner of the shell process\n", &euid},
+    {"gid", "Help for the gid command :\n -> gid: print the group ID (gid), which the process is a part of\n", &gid},
+    {"egid", "Help for the egid command :\n -> egid: print the effective group ID (egid), which the process is a part of\n", &egid},
+    {"sysinfo", "Help for the sysinfo command :\n -> sysinfo: print the sysname, nodename, release, version and machine fields of the system information.\n", &sysinfo},
 };
 
 int executeBuiltin(Ukaz u, int* tokenCount, char** tokens, bool* ozadje){
