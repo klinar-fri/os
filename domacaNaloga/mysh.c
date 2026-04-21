@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/utsname.h>
+#include <sys/wait.h>
 
 // za cpcat
 #define BUFFER_SIZE 1024 
@@ -797,18 +798,48 @@ int executeBuiltin(Ukaz u, int* tokenCount, char** tokens, bool* ozadje){
     return u.fPtr(tokenCount, tokens);
 }
 
-int executeExternal(int* tokenCount, char** tokens, int* endingModifiers){
-    printf("External command '");
-    bool first = true;
-    for(int i = 0; i < *tokenCount - *endingModifiers; i++){
-        if(first){
-            printf("%s", tokens[i]);
-            first = false;
-        }else{
-            printf(" %s", tokens[i]);
+int executeExternal(int* tokenCount, char** tokens, int* endingModifiers, bool* ozadje){
+    if(DEBUG_LEVEL > 0){
+        printf("External command '");
+        bool first = true;
+        for(int i = 0; i < *tokenCount - *endingModifiers; i++){
+            if(first){
+                printf("%s", tokens[i]);
+                first = false;
+            }else{
+                printf(" %s", tokens[i]);
+            }
+        } 
+        printf("'\n");
+    }
+
+    fflush(stdin);
+    int pid = fork();
+    if(pid < 0){
+        printf("ERROR!: fork error\n");
+        fflush(stdout);
+        return -1;
+    }else if(pid == 0){
+        // ospredje
+        if(execvp(tokens[0], tokens) < 0){
+            int koda = errno;
+            perror("exec");
+            fflush(stdout);
+            return 127;
         }
-    } 
-    printf("'\n");
+    }
+
+    if(!*ozadje){
+        int status;
+        waitpid(pid, &status, 0);
+        fflush(stdout);
+        if(WIFEXITED(status)){
+            return WEXITSTATUS(status);
+        }
+    }
+
+    fflush(stdin);
+    fflush(stdout);
     return 0;
 }
 
@@ -837,7 +868,7 @@ int findBuiltin(int* tokenCount, char** tokens, bool* ozadje, int* endingModifie
             return executeBuiltin(ukazi[i], tokenCount, tokens, ozadje);
         }
     }
-    return executeExternal(tokenCount, tokens, endingModifiers);
+    return executeExternal(tokenCount, tokens, endingModifiers, ozadje);
 }
 
 void parseTokens(int tokenCount, char** tokens){
@@ -936,6 +967,8 @@ int tokenizeInput(char* imeLupine, char* line, char** tokens, char* toFree){
             printf("Token %d: '%s'\n", j, tokens[j]);
         }
     }
+    
+    tokens[tokenCount] = NULL;
     return tokenCount;
 }
 
