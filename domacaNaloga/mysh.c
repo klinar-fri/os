@@ -817,14 +817,12 @@ int executeExternal(int* tokenCount, char** tokens, int* endingModifiers, bool* 
     int pid = fork();
     if(pid < 0){
         printf("ERROR!: fork error\n");
-        fflush(stdout);
         return -1;
     }else if(pid == 0){
         // ospredje
         if(execvp(tokens[0], tokens) < 0){
             int koda = errno;
             perror("exec");
-            fflush(stdout);
             return 127;
         }
     }
@@ -832,14 +830,10 @@ int executeExternal(int* tokenCount, char** tokens, int* endingModifiers, bool* 
     if(!*ozadje){
         int status;
         waitpid(pid, &status, 0);
-        fflush(stdout);
         if(WIFEXITED(status)){
             return WEXITSTATUS(status);
         }
     }
-
-    fflush(stdin);
-    fflush(stdout);
     return 0;
 }
 
