@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <sys/utsname.h>
 #include <sys/wait.h>
+#include <signal.h>
 
 // za cpcat
 #define BUFFER_SIZE 1024 
@@ -29,6 +30,26 @@ typedef struct{
     // kazalec na funkcijo
     int (*fPtr)(int*, char**);
 } Ukaz;
+
+#define MAX_BG 128
+typedef struct{
+    pid_t pid;
+    int status;
+    bool koncan;
+} OtrokBg;
+
+OtrokBg tabelaOzadje[MAX_BG];
+int stProcOzadje = 0;
+
+void bgWrite(pid_t pid){
+    for(int i = 0; i < MAX_BG; i++){
+        if(tabelaOzadje[i].pid == 0){
+            tabelaOzadje[i].pid = pid;
+            tabelaOzadje[i].koncan = false;
+            return;
+        }
+    }
+}
 
 // neka struktura samo za potrebe funkicje
 // zato ker nimamo parov v C
@@ -90,9 +111,9 @@ LineInfo stringCleanup(char* line){
 
 int exitCustom(int* tokenCount, char** tokens){
     if(*tokenCount == 2){
-        exit(atoi(tokens[1]));
+        _exit(atoi(tokens[1]));
     }else{
-        exit(STATUS);
+        _exit(STATUS);
     }
     return 0;
 }
@@ -747,6 +768,40 @@ int pinfo(int* tokenCount, char** tokens){
     free(pidTab);
     closedir(dir);
 }
+
+static int vgrajenStatus = -1;
+static bool vgrajenKoncan = false;
+
+int waitone(int* tokenCount, char** tokens){
+
+    if(vgrajenKoncan){
+        vgrajenKoncan = false;
+        return vgrajenStatus;
+    }
+
+    pid_t pid = *tokenCount == 1 ? -1 : atoi(tokens[1]);
+    int status;
+    if(*tokenCount == 1){
+        if(waitpid(-1,  &status, 0) < 0){
+            // perror("ERROR");
+            return 0;
+        }
+    }else{
+        pid_t pid = atoi(tokens[1]);
+        if(waitpid(pid, &status, 0) < 0){
+            // perror("ERROR");
+            return 0;
+        }
+    }
+    if(WIFEXITED(status)){
+        return WEXITSTATUS(status);
+    }
+    return 0;
+}
+
+int waitall(){
+    return 0;
+}
 // -------------------------------------------------------------------------
 
 Ukaz ukazi[] = {
@@ -785,7 +840,13 @@ Ukaz ukazi[] = {
     {"proc", "Help for the proc command :\n -> proc <path>: set the path to the procfs data system, no argument: print the current path (default is /proc), command detects if the path does not exist and fails!\n", &proc},
     {"pids", "Help for the pids command :\n -> pids: print the PID-s of the current processes from the procfs data system\n", &pids},
     {"pinfo", "Help for the pinfo command :\n -> pinfo: print the info of the current prcesses (PID, PPID, STATE, NAME) from the stat file in procfs\n", &pinfo},
+    {"waitone", "Help for the waitone command :\n -> waitone <pid>: waits for the child with the given PID\n                   if PID is empty, we wait for a random child process\n                   if the child does not exist, the exit status is 0, else the exit status is that of the child process\n", &waitone},
+    {"waitall", "Help for the waitall command :\n -> waitall: waits for all children processes\n", &waitall},
 };
+
+void sigchildHandler(int signum){
+    signal(SIGCHLD, sigchildHandler);
+}
 
 int executeBuiltin(Ukaz u, int* tokenCount, char** tokens, bool* ozadje){
     if(DEBUG_LEVEL > 0){
@@ -795,7 +856,12 @@ int executeBuiltin(Ukaz u, int* tokenCount, char** tokens, bool* ozadje){
             printf("Executing builtin '%s' in foreground\n", tokens[0]);
         }
     }
-    return u.fPtr(tokenCount, tokens);
+    int trStatus = u.fPtr(tokenCount, tokens);
+    if(*ozadje){
+        vgrajenStatus = trStatus;
+        vgrajenKoncan = true;
+    }
+    return trStatus;
 }
 
 int executeExternal(int* tokenCount, char** tokens, int* endingModifiers, bool* ozadje){
@@ -813,27 +879,31 @@ int executeExternal(int* tokenCount, char** tokens, int* endingModifiers, bool* 
         printf("'\n");
     }
 
-    fflush(stdin);
+    fflush(stdout);
     int pid = fork();
     if(pid < 0){
         printf("ERROR!: fork error\n");
         return -1;
     }else if(pid == 0){
-        // ospredje
         if(execvp(tokens[0], tokens) < 0){
             int koda = errno;
             perror("exec");
-            return 127;
+            exit(127);
         }
     }
-
+    // razlika med izvajanjem v ozadju in ospredju je sledeča:
+    // če izvajamo v ospredju, potem starš čaka na konec ukaza
+    // če v ozadju pa starš ne čaka
     if(!*ozadje){
         int status;
-        waitpid(pid, &status, 0);
+        if(waitpid(pid, &status, 0) < 0){
+            perror("ERROR (cakanje v ospredju)");
+        }
         if(WIFEXITED(status)){
             return WEXITSTATUS(status);
         }
     }
+
     return 0;
 }
 
@@ -875,25 +945,27 @@ void parseTokens(int tokenCount, char** tokens){
     
     int endingModifiers = 0;
 
-    tokenCount -= 1;
-    int diff = 3 < tokenCount - 1 ? 3 : tokenCount - 1;
+    int idx = tokenCount - 1;
+    int diff = idx + 1 < 3 ? idx + 1 : 3;
 
     for(int i = 0; i < diff; i++){
-        if(tokens[tokenCount][0] == '&' && strlen(tokens[tokenCount]) == 1){
+
+        if(tokens[idx][0] == '&' && strlen(tokens[idx]) == 1){
             ozadje = true;
             endingModifiers++;
-        }
-        if(tokens[tokenCount][0] == '>'){
+            tokens[idx] = NULL;
+        }else if(tokens[idx][0] == '>'){
             preusmeritevIzhoda = true;
-            pIPtr = tokens[tokenCount] + 1;
+            pIPtr = tokens[idx] + 1;
             endingModifiers++;
-        }
-        if(tokens[tokenCount][0] == '<'){
+            tokens[idx] = NULL;
+        }else if(tokens[idx][0] == '<'){
             preusmeritevVhoda= true;
-            pVPtr = tokens[tokenCount] + 1;
+            pVPtr = tokens[idx] + 1;
             endingModifiers++;
-        }
-        tokenCount -= 1;
+            tokens[idx] = NULL;
+        }else break;
+        idx--;
     }
 
     if(DEBUG_LEVEL > 0){
@@ -971,6 +1043,8 @@ int main(int argc, char** argv){
 
     // Tabela tokenov
     char** tokens = malloc(MAX_LINE_SIZE*sizeof(char*));
+
+    signal(SIGCHLD, sigchildHandler);
 
     while(true){
         char* line = malloc(MAX_LINE_SIZE*sizeof(char));
