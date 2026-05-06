@@ -115,7 +115,7 @@ int exitCustom(int* tokenCount, char** tokens){
     }else{
         _exit(STATUS);
     }
-    return 0;
+    return 42;
 }
 
 int debug(int* tokenCount, char** tokens){
@@ -773,7 +773,6 @@ static int vgrajenStatus = -1;
 static bool vgrajenKoncan = false;
 
 int waitone(int* tokenCount, char** tokens){
-
     if(vgrajenKoncan){
         vgrajenKoncan = false;
         return vgrajenStatus;
@@ -799,8 +798,22 @@ int waitone(int* tokenCount, char** tokens){
     return 0;
 }
 
-int waitall(){
-    return 0;
+int waitall(int* tokenCount, char** tokens){
+    int statusZadnji = 0;
+    if(vgrajenKoncan){
+        vgrajenKoncan = false;
+        return vgrajenStatus;
+    }
+    int status = 0;
+    while(1){
+        if(waitpid(-1, &status, 0) < 0){
+            break;
+        }
+        if(WIFEXITED(status)){
+            statusZadnji = WEXITSTATUS(status);
+        }
+    }
+    return statusZadnji;
 }
 // -------------------------------------------------------------------------
 
@@ -845,7 +858,18 @@ Ukaz ukazi[] = {
 };
 
 void sigchildHandler(int signum){
-    signal(SIGCHLD, sigchildHandler);
+    int pid, status, serrno;
+    serrno = errno;
+    while(1){
+        pid = waitpid(-1, &status, WNOHANG);
+        if(pid < 0){
+            // perror ("waitpid");
+            break;
+        }
+        if(pid == 0) break;
+        //notice_termination (pid, status);
+    }
+    errno = serrno;
 }
 
 int executeBuiltin(Ukaz u, int* tokenCount, char** tokens, bool* ozadje){
@@ -856,12 +880,29 @@ int executeBuiltin(Ukaz u, int* tokenCount, char** tokens, bool* ozadje){
             printf("Executing builtin '%s' in foreground\n", tokens[0]);
         }
     }
-    int trStatus = u.fPtr(tokenCount, tokens);
-    if(*ozadje){
-        vgrajenStatus = trStatus;
-        vgrajenKoncan = true;
+
+    if(!*ozadje){
+        return u.fPtr(tokenCount, tokens);
     }
-    return trStatus;
+
+    if(strcmp(tokens[0], "exit") == 0){
+        int koda = STATUS;
+        if(*tokenCount >= 2 && tokens[1] != NULL){
+            koda = atoi(tokens[1]);
+        }
+        vgrajenStatus = koda;
+        vgrajenKoncan = true;
+        return koda; 
+    }
+
+    pid_t pid = fork();
+    if(pid < 0) return -1;
+    if(pid == 0){
+        int koda = u.fPtr(tokenCount, tokens);
+        _exit(koda);
+    }
+
+    return 0;
 }
 
 int executeExternal(int* tokenCount, char** tokens, int* endingModifiers, bool* ozadje){
@@ -949,7 +990,6 @@ void parseTokens(int tokenCount, char** tokens){
     int diff = idx + 1 < 3 ? idx + 1 : 3;
 
     for(int i = 0; i < diff; i++){
-
         if(tokens[idx][0] == '&' && strlen(tokens[idx]) == 1){
             ozadje = true;
             endingModifiers++;
