@@ -36,7 +36,10 @@ typedef struct{
     bool prIzhoda;
     int idxNizaVhod;
     int idxNizaIzhod;
-}Preusmeritev;
+} Preusmeritev;
+
+int tokenizeInput(char* line, char** tokens, char* toFree);
+void parseTokens(int tokenCount, char** tokens);
 
 // zato ker nimamo parov v C
 typedef struct{
@@ -802,6 +805,97 @@ int waitall(int* tokenCount, char** tokens){
     }
     return statusZadnji;
 }
+
+int startPipe(char* ukaz, int* novFd){
+    // printf("%s\n", ukaz);
+    char** tokensPipe = malloc(100 * sizeof(char*));
+    ukaz = ukaz + 1;
+    ukaz[strlen(ukaz) - 1] = '\0';
+    int tokenCountPipe = tokenizeInput(ukaz, tokensPipe, NULL);
+
+    int fd[2];
+    pipe(fd);
+    if(!fork()){
+        dup2(fd[1], STDOUT_FILENO);
+        close(fd[0]);
+        close(fd[1]);
+        if(tokenCountPipe > 0) parseTokens(tokenCountPipe, tokensPipe);
+        _exit(0);
+    }
+
+    // Ni ravno po diagramu, lahko samo en fd prenesemo
+    // drugega pa zapremo ze tukaj, isto v middlePipe
+    close(fd[1]);
+    *novFd = fd[0];
+    free(tokensPipe);
+    return 0;
+}
+
+int middlePipe(char* ukaz, int* novFd){
+    // printf("  %s\n", ukaz);
+    char** tokensPipe = malloc(100 * sizeof(char*));
+    ukaz = ukaz + 1;
+    ukaz[strlen(ukaz) - 1] = '\0';
+    int tokenCountPipe = tokenizeInput(ukaz, tokensPipe, NULL);
+
+    int fd[2];
+    pipe(fd);
+    if(!fork()){
+        // tuki sem dal kar STDIN_FILENO : bolj pregledno kot 0 / 1
+        dup2(*novFd, STDIN_FILENO);
+        dup2(fd[1], STDOUT_FILENO);
+        close(fd[0]);
+        close(fd[1]);
+        if(tokenCountPipe > 0) parseTokens(tokenCountPipe, tokensPipe);
+        _exit(0);
+    }
+
+    close(fd[1]);
+    close(*novFd);
+    *novFd = fd[0];
+    free(tokensPipe);
+    return 0;
+}
+
+int endPipe(char* ukaz, int* novFd){
+    // printf("%s\n", ukaz);
+    char** tokensPipe = malloc(100 * sizeof(char*));
+    ukaz = ukaz + 1;
+    ukaz[strlen(ukaz) - 1] = '\0';
+    int tokenCountPipe = tokenizeInput(ukaz, tokensPipe, NULL);
+
+    if(!fork()){
+        dup2(*novFd, STDIN_FILENO);
+        close(*novFd);
+        if(tokenCountPipe > 0) parseTokens(tokenCountPipe, tokensPipe);
+        _exit(0);
+    }
+
+    close(*novFd);
+    free(tokensPipe);
+    return 0;
+}
+
+int pipes(int* tokenCount, char** tokens){
+    if(*tokenCount == 3){
+        int fd = 0;
+        startPipe(tokens[1], &fd);
+        endPipe(tokens[2], &fd);
+        wait(NULL);
+        wait(NULL);
+    }else{
+        int fd = 0;
+        startPipe(tokens[1], &fd);
+        for(int i = 2; i < (*tokenCount - 1); i++){
+            middlePipe(tokens[i], &fd);
+        }
+        endPipe(tokens[*tokenCount - 1], &fd);
+        for(int i = 0; i < (*tokenCount - 1); i++){
+            wait(NULL);
+        }
+    }
+    return 0;
+}
 // -------------------------------------------------------------------------
 
 Ukaz ukazi[] = {
@@ -842,6 +936,7 @@ Ukaz ukazi[] = {
     {"pinfo", "Help for the pinfo command :\n -> pinfo: print the info of the current prcesses (PID, PPID, STATE, NAME) from the stat file in procfs\n", &pinfo},
     {"waitone", "Help for the waitone command :\n -> waitone <pid>: waits for the child with the given PID\n                   if PID is empty, we wait for a random child process\n                   if the child does not exist, the exit status is 0, else the exit status is that of the child process\n", &waitone},
     {"waitall", "Help for the waitall command :\n -> waitall: waits for all children processes\n", &waitall},
+    {"pipes", "Help for the pipes command :\n -> pipes <\"level_1\" \"level_2\" \"level_3\" ...>: make command pipelines (Don't forget \"\") [example]:\n    pipes \"cat /etc/passwd\" \"cut -d: -f7\" \"sort\" \"uniq -c\"\n     is equivalent to this pipeline in bash:\n    cat /etc/passwd | cut -d: -f7 | sort | uniq -c\n", &pipes},
 };
 
 void sigchildHandler(int signum){
@@ -991,7 +1086,7 @@ int findBuiltin(int* tokenCount, char** tokens, bool* ozadje, int* endingModifie
                 printf("%s", ukazi[4].pomoc);
                 printf("Builtin commands:");
                 for(int i = 0; i < steviloUkazov; i++){
-                    if(i % 3 == 0 && i < steviloUkazov - 3) printf("\n");
+                    if(i % 3 == 0) printf("\n");
                     if(i == steviloUkazov -  1){
                         printf("%8s ", ukazi[i].ime);
                     }else{
@@ -1066,7 +1161,7 @@ void parseTokens(int tokenCount, char** tokens){
     }
 }
 
-int tokenizeInput(char* imeLupine, char* line, char** tokens, char* toFree){
+int tokenizeInput(char* line, char** tokens, char* toFree){
     int tokenCount = 0;
     int lineSize = strlen(line);
     if(line[lineSize - 1] == '\n') line[lineSize - 1] = '\0';
@@ -1098,15 +1193,19 @@ int tokenizeInput(char* imeLupine, char* line, char** tokens, char* toFree){
     tokenCount++;
 
     END:
-    // tle odstranimo še " "
-    for(int i = 0; i < tokenCount; i++){
-        char* ptr = tokens[i];
-        if(*ptr == '"'){
-            int len = strlen(ptr);
-            ptr[len - 1] = '\0';
-            tokens[i] = ptr += 1;
+
+    if(tokenCount > 0 && strcmp(tokens[0], "pipes") != 0){
+        // tle odstranimo še " "
+        for(int i = 0; i < tokenCount; i++){
+            char* ptr = tokens[i];
+            if(*ptr == '"'){
+                int len = strlen(ptr);
+                ptr[len - 1] = '\0';
+                tokens[i] = ptr += 1;
+            }
         }
     }
+
     if(DEBUG_LEVEL > 0){
         for(int j = 0; j < tokenCount; j++){
             printf("Token %d: '%s'\n", j, tokens[j]);
@@ -1131,12 +1230,12 @@ int main(int argc, char** argv){
         if(isatty(STDIN_FILENO)){
             printf("%s", imeLupine);
             fgets(line, MAX_LINE_SIZE, stdin);
-            int tokenCount = tokenizeInput(imeLupine, line, tokens, toFree);
+            int tokenCount = tokenizeInput(line, tokens, toFree);
             if(tokenCount > 0) parseTokens(tokenCount, tokens);
         }else{
             if(fgets(line, MAX_LINE_SIZE, stdin) == NULL) break;
             // printf("-%s", line);
-            int tokenCount = tokenizeInput(imeLupine, line, tokens, toFree);
+            int tokenCount = tokenizeInput(line, tokens, toFree);
             if(tokenCount > 0) parseTokens(tokenCount, tokens);
         }
         free(line);
