@@ -31,27 +31,13 @@ typedef struct{
     int (*fPtr)(int*, char**);
 } Ukaz;
 
-#define MAX_BG 128
 typedef struct{
-    pid_t pid;
-    int status;
-    bool koncan;
-} OtrokBg;
+    bool prVhoda;
+    bool prIzhoda;
+    int idxNizaVhod;
+    int idxNizaIzhod;
+}Preusmeritev;
 
-OtrokBg tabelaOzadje[MAX_BG];
-int stProcOzadje = 0;
-
-void bgWrite(pid_t pid){
-    for(int i = 0; i < MAX_BG; i++){
-        if(tabelaOzadje[i].pid == 0){
-            tabelaOzadje[i].pid = pid;
-            tabelaOzadje[i].koncan = false;
-            return;
-        }
-    }
-}
-
-// neka struktura samo za potrebe funkicje
 // zato ker nimamo parov v C
 typedef struct{
     char* line;
@@ -177,6 +163,7 @@ int print(int* tokenCount, char** tokens){
 int echo(int* tokenCount, char** tokens){
     bool prvi = true;
     for(int i = 1; i < *tokenCount; i++){
+        if(tokens[i] == NULL) continue;
         if(prvi){
             printf("%s", tokens[i]);
             prvi = false;
@@ -872,7 +859,7 @@ void sigchildHandler(int signum){
     errno = serrno;
 }
 
-int executeBuiltin(Ukaz u, int* tokenCount, char** tokens, bool* ozadje){
+int executeBuiltin(Ukaz u, int* tokenCount, char** tokens, bool* ozadje, Preusmeritev* pr){
     if(DEBUG_LEVEL > 0){
         if(*ozadje){
             printf("Executing builtin '%s' in background\n", tokens[0]);
@@ -881,9 +868,33 @@ int executeBuiltin(Ukaz u, int* tokenCount, char** tokens, bool* ozadje){
         }
     }
 
-    if(!*ozadje){
-        return u.fPtr(tokenCount, tokens);
+
+    int shranjenVhod = dup(STDIN_FILENO);
+    int shranjenIzhod = dup(STDOUT_FILENO);
+
+    if(pr->prVhoda){
+        int fd = open(tokens[pr->idxNizaVhod], O_RDONLY, 0644);
+        dup2(fd, STDIN_FILENO);
+        close(fd);
+        *tokenCount = *tokenCount - 1;
     }
+    if(pr->prIzhoda){
+        int fd = open(tokens[pr->idxNizaIzhod], O_CREAT | O_WRONLY | O_TRUNC, 0644);
+        dup2(fd, STDOUT_FILENO);
+        close(fd);
+        *tokenCount = *tokenCount - 1;
+    }
+
+    if(!*ozadje){
+        int koda = u.fPtr(tokenCount, tokens);
+        dup2(shranjenVhod, STDIN_FILENO);
+        dup2(shranjenIzhod, STDOUT_FILENO);
+        close(shranjenVhod);
+        close(shranjenIzhod);
+        return koda;
+    }
+
+    // ali deluje v ozdaju, potreben test
 
     if(strcmp(tokens[0], "exit") == 0){
         int koda = STATUS;
@@ -905,7 +916,7 @@ int executeBuiltin(Ukaz u, int* tokenCount, char** tokens, bool* ozadje){
     return 0;
 }
 
-int executeExternal(int* tokenCount, char** tokens, int* endingModifiers, bool* ozadje){
+int executeExternal(int* tokenCount, char** tokens, int* endingModifiers, bool* ozadje, Preusmeritev* pr){
     if(DEBUG_LEVEL > 0){
         printf("External command '");
         bool first = true;
@@ -926,6 +937,18 @@ int executeExternal(int* tokenCount, char** tokens, int* endingModifiers, bool* 
         printf("ERROR!: fork error\n");
         return -1;
     }else if(pid == 0){
+        if(pr->prVhoda){
+            int fd = open(tokens[pr->idxNizaVhod], O_RDONLY, 0644);
+            dup2(fd, STDIN_FILENO);
+            close(fd);
+            tokens[pr->idxNizaVhod] = NULL;
+        }
+        if(pr->prIzhoda){
+            int fd = open(tokens[pr->idxNizaIzhod], O_CREAT | O_WRONLY | O_TRUNC, 0644);
+            dup2(fd, STDOUT_FILENO);
+            close(fd);
+            tokens[pr->idxNizaIzhod] = NULL;
+        }
         if(execvp(tokens[0], tokens) < 0){
             int koda = errno;
             perror("exec");
@@ -949,12 +972,12 @@ int executeExternal(int* tokenCount, char** tokens, int* endingModifiers, bool* 
 }
 
 
-int findBuiltin(int* tokenCount, char** tokens, bool* ozadje, int* endingModifiers){
+int findBuiltin(int* tokenCount, char** tokens, bool* ozadje, int* endingModifiers, Preusmeritev* pr){
     int steviloUkazov = sizeof(ukazi) / sizeof(Ukaz);
     int stUkDup = steviloUkazov;
     for(int i = 0; i < steviloUkazov; i++){
         if(strcmp(tokens[0], "help") == 0){
-            if(*tokenCount == 2){
+            if(*tokenCount == 2 && strcmp(tokens[1], "help") != 0){
                 for(int j = 0; j < stUkDup; j++){
                     if(strcmp(tokens[1], ukazi[j].ime) == 0){
                         printf("%s", ukazi[j].pomoc);
@@ -964,25 +987,39 @@ int findBuiltin(int* tokenCount, char** tokens, bool* ozadje, int* endingModifie
                 printf("Command %s is not builtin!\n", tokens[1]);
                 return 1;
             }else{
-                // mal slabo ker je hard-codan, ukaz[5] je help za help
+                // mal slabo ker je hard-codan, ukaz[4] je help za help
                 printf("%s", ukazi[4].pomoc);
+                printf("Builtin commands:");
+                for(int i = 0; i < steviloUkazov; i++){
+                    if(i % 3 == 0 && i < steviloUkazov - 3) printf("\n");
+                    if(i == steviloUkazov -  1){
+                        printf("%8s ", ukazi[i].ime);
+                    }else{
+                        printf("%8s, ", ukazi[i].ime);
+                    }
+                }
+                printf("\nFor external command help use: man <command_name>, or man man, to open the Linux manual.\n");
                 return 0;
             }
         }
         if(strcmp(tokens[0], ukazi[i].ime) == 0){
-            return executeBuiltin(ukazi[i], tokenCount, tokens, ozadje);
+            return executeBuiltin(ukazi[i], tokenCount, tokens, ozadje, pr);
         }
     }
-    return executeExternal(tokenCount, tokens, endingModifiers, ozadje);
+    return executeExternal(tokenCount, tokens, endingModifiers, ozadje, pr);
 }
 
 void parseTokens(int tokenCount, char** tokens){
-    bool preusmeritevIzhoda = false;
     char* pIPtr = NULL;
-    bool preusmeritevVhoda = false;
     char* pVPtr = NULL;
     bool ozadje = false;
     int tknCpy = tokenCount;
+
+    Preusmeritev pr;
+    pr.prIzhoda = false;
+    pr.prVhoda = false;
+    pr.idxNizaVhod = 0;
+    pr.idxNizaIzhod = 0;
     
     int endingModifiers = 0;
 
@@ -995,24 +1032,26 @@ void parseTokens(int tokenCount, char** tokens){
             endingModifiers++;
             tokens[idx] = NULL;
         }else if(tokens[idx][0] == '>'){
-            preusmeritevIzhoda = true;
             pIPtr = tokens[idx] + 1;
             endingModifiers++;
-            tokens[idx] = NULL;
+            tokens[idx] = tokens[idx] + 1;
+            pr.prIzhoda = true;
+            pr.idxNizaIzhod = idx;
         }else if(tokens[idx][0] == '<'){
-            preusmeritevVhoda= true;
             pVPtr = tokens[idx] + 1;
             endingModifiers++;
-            tokens[idx] = NULL;
+            tokens[idx] = tokens[idx] + 1;
+            pr.prVhoda = true;
+            pr.idxNizaVhod = idx;
         }else break;
         idx--;
     }
 
     if(DEBUG_LEVEL > 0){
-        if(preusmeritevVhoda){
+        if(pr.prVhoda){
             printf("Input redirect: '%s'\n", pVPtr);
         }
-        if(preusmeritevIzhoda){
+        if(pr.prIzhoda){
             printf("Output redirect: '%s'\n", pIPtr);
         }
         if(ozadje){
@@ -1021,9 +1060,9 @@ void parseTokens(int tokenCount, char** tokens){
     }
 
     if(!ozadje){
-        STATUS = findBuiltin(&tknCpy, tokens, &ozadje, &endingModifiers);
+        STATUS = findBuiltin(&tknCpy, tokens, &ozadje, &endingModifiers, &pr);
     }else{
-        findBuiltin(&tknCpy, tokens, &ozadje, &endingModifiers);
+        findBuiltin(&tknCpy, tokens, &ozadje, &endingModifiers, &pr);
     }
 }
 
