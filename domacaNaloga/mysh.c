@@ -11,6 +11,7 @@
 #include <sys/utsname.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <time.h>
 
 // za cpcat
 #define BUFFER_SIZE 1024 
@@ -896,6 +897,90 @@ int pipes(int* tokenCount, char** tokens){
     }
     return 0;
 }
+
+int weather(int* tokenCount, char** tokens){
+    char* mesto = "Ljubljana";
+    char* linkStart = "https://wttr.in/";
+    char* linkEnd = "?format=%t@%C@%h";
+
+    if(*tokenCount == 2){
+        mesto = tokens[1];
+    }
+    char* link = calloc(200,sizeof(char));
+    strcpy(link, linkStart);
+    strcat(link, mesto);
+    strcat(link, linkEnd);
+    // printf("%s\n", link);
+
+    int fd[2];
+    pipe(fd);
+
+    if(fork() == 0){
+        close(fd[0]);
+        dup2(fd[1], STDOUT_FILENO); 
+        close(fd[1]);
+        execlp("curl", "curl", "-s", link, NULL);
+        exit(1);
+    }
+    close(fd[1]);
+
+    char* info = calloc(200, sizeof(char));
+    read(fd[0], info, 200);
+    close(fd[0]);
+    wait(NULL);
+
+    // printf("%s\n", info);
+
+    char* t = malloc(20 * sizeof(char));
+    char* w = malloc(20 * sizeof(char));
+    char* m = malloc(20 * sizeof(char));
+
+    int i = 0;
+    while(info[i] != '@'){
+        t[i] = info[i];
+        i++;
+    }
+    t[i] = '\0';
+    i++;
+
+    int j = 0;
+    while(info[i] != '@'){
+        w[j] = info[i];
+        j++;
+        i++;
+    }
+    w[j] = '\0';
+    i++;
+
+    int k = 0;
+    while(info[i] != '\0'){
+        m[k] = info[i];
+        k++;
+        i++;
+    }
+    m[k] = info[i];
+
+    time_t trDatumInCas;
+    time(&trDatumInCas);
+
+    // char* datInCas = malloc(100 * sizeof(char));
+    char* datInCas = ctime(&trDatumInCas);
+    datInCas[strlen(datInCas) - 1] = '\0';
+
+    char* output = malloc(200 * sizeof(char));
+    sprintf(output, "%s, %s:\n\tTemperatura: %s\n\tVreme: %s\n\tVlaga v zraku: %s\n", mesto, datInCas, t, w, m);
+    // printf("%s", output);
+    printf("%s", output);
+    fflush(stdout);
+
+    free(t);
+    free(w);
+    free(m);
+    free(link);
+    free(info);
+    free(output);
+    return 0;
+}
 // -------------------------------------------------------------------------
 
 Ukaz ukazi[] = {
@@ -937,6 +1022,7 @@ Ukaz ukazi[] = {
     {"waitone", "Help for the waitone command :\n -> waitone <pid>: waits for the child with the given PID\n                   if PID is empty, we wait for a random child process\n                   if the child does not exist, the exit status is 0, else the exit status is that of the child process\n", &waitone},
     {"waitall", "Help for the waitall command :\n -> waitall: waits for all children processes\n", &waitall},
     {"pipes", "Help for the pipes command :\n -> pipes <\"level_1\" \"level_2\" \"level_3\" ...>: make command pipelines (Don't forget \"\") [example]:\n    pipes \"cat /etc/passwd\" \"cut -d: -f7\" \"sort\" \"uniq -c\"\n     is equivalent to this pipeline in bash:\n    cat /etc/passwd | cut -d: -f7 | sort | uniq -c\n", &pipes},
+    {"weather", "Help for the weather command :\n -> weather <City> : tells you the weather in specific City {default is : Ljubljana} (calls the wttr.in/City API)\n", &weather},
 };
 
 void sigchildHandler(int signum){
