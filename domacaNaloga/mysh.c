@@ -41,8 +41,12 @@ typedef struct{
 
 int tokenizeInput(char* line, char** tokens, char* toFree);
 void parseTokens(int tokenCount, char** tokens);
+
 char** tabelaPrUkazov;
 int stPrUkazov = 0;
+
+static int vgrajenStatus = -1;
+static bool vgrajenKoncan = false;
 
 // zato ker nimamo parov v C
 typedef struct{
@@ -526,7 +530,6 @@ int linklist(int* tokenCount, char** tokens){
     return 0;
 }
 
-
 int cpcat(int* tokenCount, char** tokens){
     // stdin -> stdout
     BUFFER_ALLOC
@@ -649,8 +652,6 @@ int sysinfo(int* tokenCount, char** tokens){
     return 0;
 }
 
-
-
 int proc(int* tokenCount, char** tokens){
     if(*tokenCount == 2){
         if(access(tokens[1], F_OK|R_OK) < 0){
@@ -761,9 +762,6 @@ int pinfo(int* tokenCount, char** tokens){
     free(pidTab);
     closedir(dir);
 }
-
-static int vgrajenStatus = -1;
-static bool vgrajenKoncan = false;
 
 int waitone(int* tokenCount, char** tokens){
     if(vgrajenKoncan){
@@ -984,7 +982,6 @@ int weather(int* tokenCount, char** tokens){
     return 0;
 }
 
-
 int lc(int* tokenCount, char** tokens){
     if(*tokenCount == 1){
         if(stPrUkazov > 0){
@@ -1117,7 +1114,6 @@ int executeBuiltin(Ukaz u, int* tokenCount, char** tokens, bool* ozadje, Preusme
             printf("Executing builtin '%s' in foreground\n", tokens[0]);
         }
     }
-
 
     int shranjenVhod = dup(STDIN_FILENO);
     int shranjenIzhod = dup(STDOUT_FILENO);
