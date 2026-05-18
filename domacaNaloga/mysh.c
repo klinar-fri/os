@@ -41,6 +41,8 @@ typedef struct{
 
 int tokenizeInput(char* line, char** tokens, char* toFree);
 void parseTokens(int tokenCount, char** tokens);
+char** tabelaPrUkazov;
+int stPrUkazov = 0;
 
 // zato ker nimamo parov v C
 typedef struct{
@@ -968,7 +970,7 @@ int weather(int* tokenCount, char** tokens){
     datInCas[strlen(datInCas) - 1] = '\0';
 
     char* output = malloc(200 * sizeof(char));
-    sprintf(output, "%s, %s:\n\tTemperatura: %s\n\tVreme: %s\n\tVlaga v zraku: %s\n", mesto, datInCas, t, w, m);
+    sprintf(output, "%s, %s:\n\tTemperatue: %s\n\tWeather: %s\n\tHumidity: %s\n", mesto, datInCas, t, w, m);
     // printf("%s", output);
     printf("%s", output);
     fflush(stdout);
@@ -981,6 +983,72 @@ int weather(int* tokenCount, char** tokens){
     free(output);
     return 0;
 }
+
+
+int lc(int* tokenCount, char** tokens){
+    if(*tokenCount == 1){
+        if(stPrUkazov > 0){
+            printf("%s\n", tabelaPrUkazov[stPrUkazov - 1]);
+            fflush(stdout);
+        }else{
+            printf("ERROR: Command history does not exist!\n");
+            fflush(stdout);
+            return 1;
+        }
+    }else if(*tokenCount == 2){
+        if(tokens[1][0] == 'a' && strlen(tokens[1]) == 1){
+            printf("Command history:\n");
+            for(int i = 0; i < stPrUkazov; i++){
+                printf("  %d: %s\n", stPrUkazov - i,  tabelaPrUkazov[i]);
+            }
+            fflush(stdout);
+        }else if(tokens[1][0] == 'x' && strlen(tokens[1]) == 1){
+            char** tokensLc = malloc(100 * sizeof(char*));
+            if(stPrUkazov <= 0) return 1;
+            if(strcmp("lc x", tabelaPrUkazov[stPrUkazov - 1]) == 0) return 0;
+            if(strcmp("lc a", tabelaPrUkazov[stPrUkazov - 1]) == 0) return 0;
+            int tokenCountLc = tokenizeInput(tabelaPrUkazov[stPrUkazov - 1], tokensLc, NULL);
+            if(tokenCountLc > 0) parseTokens(tokenCountLc, tokensLc);
+            free(tokensLc);
+        }else{
+            int idx = atoi(tokens[1]);
+            int offset = stPrUkazov - 1 - idx;
+            if(offset < 0){
+                printf("ERROR: Index does not exist!\n");
+                return 1;
+            }
+            printf("%s\n", tabelaPrUkazov[stPrUkazov - 1 - idx]);
+            fflush(stdout);
+        }
+    }else if(*tokenCount == 3){
+        if(tokens[1][0] == 'a' && strlen(tokens[1]) == 1){
+            printf("Command history:\n");
+            for(int i = 0; i < stPrUkazov; i++){
+                printf("  %d: %s\n", stPrUkazov - i,  tabelaPrUkazov[i]);
+            }
+            fflush(stdout);
+        }else if(tokens[1][0] == 'x' && strlen(tokens[1]) == 1){
+            int idx = atoi(tokens[2]);
+            int offset = stPrUkazov - 1 - idx;
+            if(offset < 0){
+                printf("ERROR: Index does not exist!\n");
+                fflush(stdout);
+                return 1;
+            }
+
+            char** tokensLc = malloc(100 * sizeof(char*));
+            if(stPrUkazov <= 0) return 1;
+            int tokenCountLc = tokenizeInput(tabelaPrUkazov[stPrUkazov - 1 - idx], tokensLc, NULL);
+            if(tokenCountLc > 0) parseTokens(tokenCountLc, tokensLc);
+            free(tokensLc);
+        }
+    }else{
+        printf("ERROR: Expected maximum 2 arguments!\nGet usage information using command: help lc.\n");
+
+    }
+    return 0;
+}
+
 // -------------------------------------------------------------------------
 
 Ukaz ukazi[] = {
@@ -1023,6 +1091,7 @@ Ukaz ukazi[] = {
     {"waitall", "Help for the waitall command :\n -> waitall: waits for all children processes\n", &waitall},
     {"pipes", "Help for the pipes command :\n -> pipes <\"level_1\" \"level_2\" \"level_3\" ...>: make command pipelines (Don't forget \"\") [example]:\n    pipes \"cat /etc/passwd\" \"cut -d: -f7\" \"sort\" \"uniq -c\"\n     is equivalent to this pipeline in bash:\n    cat /etc/passwd | cut -d: -f7 | sort | uniq -c\n", &pipes},
     {"weather", "Help for the weather command :\n -> weather <City> : tells you the weather in specific City {default is : Ljubljana} (calls the wttr.in/City API)\n", &weather},
+    {"lc", "Help for the lc command :\n -> lc <mode_option index_option>: display the last used command\n     mode: 'a' lists all recent commands\n     mode: 'x' executes the last command or command at index\n     index can specify history offset (0 - last, 1 - one before last, end so on)\n     Note that arguments are optional!\n", &lc},
 };
 
 void sigchildHandler(int signum){
@@ -1308,6 +1377,9 @@ int main(int argc, char** argv){
     // Tabela tokenov
     char** tokens = malloc(MAX_LINE_SIZE*sizeof(char*));
 
+    tabelaPrUkazov = malloc(1000 * sizeof(char*));
+    stPrUkazov = 0;
+
     signal(SIGCHLD, sigchildHandler);
 
     while(true){
@@ -1324,8 +1396,18 @@ int main(int argc, char** argv){
             int tokenCount = tokenizeInput(line, tokens, toFree);
             if(tokenCount > 0) parseTokens(tokenCount, tokens);
         }
+        tabelaPrUkazov[stPrUkazov] = malloc(1000 * sizeof(char));
+        strcpy(tabelaPrUkazov[stPrUkazov], line);
+        stPrUkazov++;
         free(line);
         if(toFree != NULL) free(toFree);
     }
+
+    for(int i = 0; i < stPrUkazov; i++){
+        // printf("%s\n", tabelaPrUkazov[i]);
+        free(tabelaPrUkazov[i]);
+    }
+    free(tabelaPrUkazov);
+
     return STATUS;
 }
