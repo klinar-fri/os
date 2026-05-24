@@ -44,6 +44,7 @@ void parseTokens(int tokenCount, char** tokens);
 
 char** tabelaPrUkazov;
 int stPrUkazov = 0;
+bool cleared = false;
 
 static int vgrajenStatus = -1;
 static bool vgrajenKoncan = false;
@@ -1046,6 +1047,19 @@ int lc(int* tokenCount, char** tokens){
     return 0;
 }
 
+int clearHistory(int* tokenCount, char** tokens){
+    int fd = open("history.log", O_TRUNC);
+    if(fd < 0){
+        int koda = errno;
+        perror("ERROR");
+        return koda;
+    }
+    cleared = true;
+    stPrUkazov = 0;
+    close(fd);
+    return 0;
+}
+
 // -------------------------------------------------------------------------
 
 Ukaz ukazi[] = {
@@ -1089,7 +1103,22 @@ Ukaz ukazi[] = {
     {"pipes", "Help for the pipes command :\n -> pipes <\"level_1\" \"level_2\" \"level_3\" ...>: make command pipelines (Don't forget \"\") [example]:\n    pipes \"cat /etc/passwd\" \"cut -d: -f7\" \"sort\" \"uniq -c\"\n     is equivalent to this pipeline in bash:\n    cat /etc/passwd | cut -d: -f7 | sort | uniq -c\n", &pipes},
     {"weather", "Help for the weather command :\n -> weather <City> : tells you the weather in specific City {default is : Ljubljana} (calls the wttr.in/City API)\n", &weather},
     {"lc", "Help for the lc command :\n -> lc <mode_option index_option>: display the last used command\n     mode: 'a' lists all recent commands\n     mode: 'x' executes the last command or command at index\n     index can specify history offset (0 - last, 1 - one before last, end so on)\n     Note that arguments are optional!\n", &lc},
+    {"clearhistory", "Help for the clearhistory command :\n -> clearhistory : clears the shell history\n", &clearHistory},
 };
+
+void loadHistory(){
+    FILE* fp = fopen("history.log", "a");
+    while(true){
+        char* str = malloc(256 * sizeof(char));
+        if(fgets(str, 256, fp) == NULL){
+            break;
+        }
+        tabelaPrUkazov[stPrUkazov] = str;
+        tabelaPrUkazov[stPrUkazov][strlen(tabelaPrUkazov[stPrUkazov]) - 1] = '\0';
+        stPrUkazov++;
+    }
+    fclose(fp);
+}
 
 void sigchildHandler(int signum){
     int pid, status, serrno;
@@ -1375,6 +1404,9 @@ int main(int argc, char** argv){
 
     tabelaPrUkazov = malloc(1000 * sizeof(char*));
     stPrUkazov = 0;
+    loadHistory();
+
+    int datotekaZgodovina = open("history.log", O_CREAT | O_WRONLY | O_APPEND, 0644);
 
     signal(SIGCHLD, sigchildHandler);
 
@@ -1392,18 +1424,33 @@ int main(int argc, char** argv){
             int tokenCount = tokenizeInput(line, tokens, toFree);
             if(tokenCount > 0) parseTokens(tokenCount, tokens);
         }
-        tabelaPrUkazov[stPrUkazov] = malloc(1000 * sizeof(char));
-        strcpy(tabelaPrUkazov[stPrUkazov], line);
-        stPrUkazov++;
-        free(line);
-        if(toFree != NULL) free(toFree);
+
+        if(cleared == false){
+            tabelaPrUkazov[stPrUkazov] = malloc(1000 * sizeof(char));
+            strcpy(tabelaPrUkazov[stPrUkazov], line);
+
+            // zgodovina iz datoteke
+            write(datotekaZgodovina, tabelaPrUkazov[stPrUkazov], strlen(tabelaPrUkazov[stPrUkazov]));
+            write(datotekaZgodovina, "\n", 1);
+
+            stPrUkazov++;
+            if(stPrUkazov == 990){
+                clearHistory(0, NULL);
+            }
+            free(line);
+            if(toFree != NULL) free(toFree);
+        }else{
+            cleared = false;
+        }
     }
+
 
     for(int i = 0; i < stPrUkazov; i++){
         // printf("%s\n", tabelaPrUkazov[i]);
         free(tabelaPrUkazov[i]);
     }
     free(tabelaPrUkazov);
+    close(datotekaZgodovina);
 
     return STATUS;
 }
