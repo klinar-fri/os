@@ -1103,7 +1103,7 @@ Ukaz ukazi[] = {
     {"pipes", "Help for the pipes command :\n -> pipes <\"level_1\" \"level_2\" \"level_3\" ...>: make command pipelines (Don't forget \"\") [example]:\n    pipes \"cat /etc/passwd\" \"cut -d: -f7\" \"sort\" \"uniq -c\"\n     is equivalent to this pipeline in bash:\n    cat /etc/passwd | cut -d: -f7 | sort | uniq -c\n", &pipes},
     {"weather", "Help for the weather command :\n -> weather <City> : tells you the weather in specific City {default is : Ljubljana} (calls the wttr.in/City API)\n", &weather},
     {"lc", "Help for the lc command :\n -> lc <mode_option index_option>: display the last used command\n     mode: 'a' lists all recent commands\n     mode: 'x' executes the last command or command at index\n     index can specify history offset (0 - last, 1 - one before last, end so on)\n     Note that arguments are optional!\n", &lc},
-    {"clhist", "Help for the clearhistory command :\n -> clearhistory : clears the shell history\n", &clearHistory},
+    {"clhist", "Help for the clearhistory command :\n -> clhist : clears the shell command history\n", &clearHistory},
 };
 
 void loadHistory(){
