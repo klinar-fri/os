@@ -1107,7 +1107,7 @@ Ukaz ukazi[] = {
 };
 
 void loadHistory(){
-    FILE* fp = fopen("history.log", "a");
+    FILE* fp = fopen("history.log", "a+");
     while(true){
         char* str = malloc(256 * sizeof(char));
         if(fgets(str, 256, fp) == NULL){
@@ -1429,7 +1429,6 @@ int main(int argc, char** argv){
             tabelaPrUkazov[stPrUkazov] = malloc(1000 * sizeof(char));
             strcpy(tabelaPrUkazov[stPrUkazov], line);
 
-            // zgodovina iz datoteke
             write(datotekaZgodovina, tabelaPrUkazov[stPrUkazov], strlen(tabelaPrUkazov[stPrUkazov]));
             write(datotekaZgodovina, "\n", 1);
 
@@ -1437,11 +1436,12 @@ int main(int argc, char** argv){
             if(stPrUkazov == 990){
                 clearHistory(0, NULL);
             }
-            free(line);
-            if(toFree != NULL) free(toFree);
         }else{
             cleared = false;
         }
+
+        free(line);
+        if(toFree != NULL) free(toFree);
     }
 
 
